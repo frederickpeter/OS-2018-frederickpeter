@@ -7,10 +7,14 @@
 
 char *binParams[20];
 char *usrParams[20];
+char *allArguments[10];
+char *parallelArray[20];
 
-char bin[600] = "tes";
-char usr[600] = "tes";
-
+char bin[600] = "";
+char usr[600] = "";
+char redirection[600] = "";
+char filename[600] = "";
+char parallelCommand[600] = "";
 
 
 void parseBatch(char * command, char *params[], char *binParams[], char *usrParams[]){
@@ -24,6 +28,7 @@ void parseBatch(char * command, char *params[], char *binParams[], char *usrPara
 		params[i] = strsep(&command, " ");
 		params[i] = strtok(params[i], "\n");
 		params[i] = strtok(params[i], "\r");
+
 		if(params[i] == NULL) break;
 	}
 	//concatenate the path with the input
@@ -52,7 +57,42 @@ void parseCommand(char * command, char *params[], char *binParams[], char *usrPa
 		params[i] = strsep(&command, " ");
 		params[i] = strtok(params[i], "\n");
 		params[i] = strtok(params[i], "\r");
+
+		allArguments[i] = params[i];
+
 		if(params[i] == NULL) break;
+		
+	}
+
+	//check if it has a redirect sign and set variable to 'redirect'
+	for(int i=0; i<10; i++){
+		if(params[i]==NULL)break;
+
+		if(strcmp(params[i], ">")==0){
+			strcpy(redirection, "redirect");
+			strcpy(filename, params[i+1]);
+			params[i] = NULL;
+			params[i+1] = NULL;
+		}
+		else{
+			strcpy(redirection, "");
+		  	//printf("%s\n", redirection);
+		}
+
+	}
+
+	//check if it has ampersand and set variable to 'parallel'
+	for(int i=0; i<10; i++){
+
+		if(params[i]==NULL)break;
+
+		if(strcmp(params[i], "&") ==0){
+			strcpy(parallelCommand, "parallel");
+			break;
+		}
+		else{
+			strcpy(parallelCommand, "");
+		}
 	}
 
 	// //concatenate the path with the input
@@ -63,12 +103,17 @@ void parseCommand(char * command, char *params[], char *binParams[], char *usrPa
 		}
 		else if(strcmp(bin, "")==0){
 			strcat(bin, params[0]);
+			//printf("%s\n", bin);
 			binParams[0] = bin;
 		}
 		else{
-			strcpy(bin, "/bin/");
-			strcat(bin, params[0]);
-			binParams[0] = bin;
+			if(strstr(bin, "/bin/")){
+				strcpy(bin, "");
+				strcpy(bin, "/bin/");
+				strcat(bin, params[0]);
+				//printf("%s\n", bin);
+				binParams[0] = bin;
+			}
 		}
 
 		if(strcmp(usr, "/usr/bin/")==0){
@@ -80,9 +125,12 @@ void parseCommand(char * command, char *params[], char *binParams[], char *usrPa
 			usrParams[0] = usr;
 		}
 		else{
-			strcpy(usr, "/usr/bin/");
-			strcat(usr, params[0]);
-			usrParams[0] = usr;
+			if(strstr(usr, "/usr/bin/")){
+				strcpy(usr, "");
+				strcpy(usr, "/usr/bin/");
+				strcat(usr, params[0]);
+				usrParams[0] = usr;
+			}
 		}
 		
  	}
@@ -103,32 +151,39 @@ void parseCommand(char * command, char *params[], char *binParams[], char *usrPa
 		
 	}
 
+
 }
 
 int executeCmd(){
 
-    // Fork process
-    pid_t pid = fork();
+	pid_t pid = fork();
+	// Child process
+	if (pid == 0) {
 
+	    //Redirect....if theres the redirect sign loop through the array to take the parameers before the redirect. 
+		//then concatenate with /bin/ and store in binParams or usrParams
+		if(strcmp(redirection, "redirect")==0){
+			FILE* file = fopen(filename, "w+");
+			dup2(fileno(file), fileno(stdout));
+			dup2(fileno(file), fileno(stderr));
 
+			fclose(file);
+		}
 
-    // Child process
-    if (pid == 0) {
+		// Execute command
+		if(!execv(binParams[0], binParams))
+			printf("%s\n", "failed");
+		else
+			execv(usrParams[0], binParams);
 
-        // Execute command
-        if(!execv(binParams[0], binParams))
-        	printf("%s\n", "failed");
-        else
-        	execv(usrParams[0], binParams);
+		// Error occurred
+		char* error = strerror(errno);
+		printf("\n%s\n", error);
 
+		return 0;
+	}
 
-        // Error occurred
-         char* error = strerror(errno);
-    	 printf("\n%s\n", error);
-        return 0;
-    }
-
-    // Parent process
+	// Parent process
     else {
         // Wait for child process to finish
         int childStatus;
@@ -136,8 +191,48 @@ int executeCmd(){
         return 1;
     }
 
-   
 }
+
+
+int executeParallel(){
+
+	if(strcmp(bin, "/bin/")==0){
+		strcat(bin, parallelArray[0]);
+		parallelArray[0] = bin;
+	}
+	else if(strcmp(bin, "")==0){
+		strcat(bin, parallelArray[0]);
+		parallelArray[0] = bin;
+	}
+	else{
+		if(strstr(bin, "/bin/")){
+			strcpy(bin, "");
+			strcpy(bin, "/bin/");
+			strcat(bin, parallelArray[0]);
+			parallelArray[0] = bin;
+		}
+	}
+
+	pid_t pid = fork();
+	// Child process
+	if (pid == 0) {
+		execv(parallelArray[0], parallelArray);
+		return 0;
+	}
+	// Parent process
+	else {
+	// Wait for child process to finish
+		int childStatus;
+		waitpid(pid, &childStatus, 0);
+		return 1;
+	}
+}
+
+
+
+   
+   
+
 
 
 int main(int argc, char *argv[]){
@@ -185,13 +280,13 @@ int main(int argc, char *argv[]){
 					if(strcmp(params[1], "/bin/")==0){
 						strcpy(bin, "");
 						strcpy(bin, "/bin/");
-						printf("%s\n", bin);
+						//printf("%s\n", bin);
 					}
 
 					if(strcmp(params[1], "/usr/bin/")==0){
 						strcpy(usr, "");
 						strcpy(usr, "/usr/bin/");
-						printf("%s\n", usr);
+						//printf("%s\n", usr);
 					}
 				}
 
@@ -208,6 +303,36 @@ int main(int argc, char *argv[]){
 					}
 				}
 				
+			}
+
+			else if(strcmp(parallelCommand, "parallel")==0){
+
+				int j =0;
+
+				for(int i =0; i<10; i++){
+					if(allArguments[i]==NULL){
+						executeParallel();
+						break;
+					}
+
+					if(strcmp(allArguments[i], "&")!=0){
+
+						parallelArray[j] = allArguments[i];
+						//parallelArray[j+1] = NULL;
+
+						j++;
+					}
+
+					else{
+						j=0;
+
+						executeParallel();
+						memset(parallelArray, 0, sizeof parallelArray);
+						//printf("%s\n", parallelArray[0]);
+						//printf("%s\n", parallelArray[1]);
+					}
+				}
+
 			}
 
 			else if(executeCmd() ==0){
