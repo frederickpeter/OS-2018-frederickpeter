@@ -4,17 +4,23 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include<pthread.h>
 
 char *binParams[20];
 char *usrParams[20];
 char *allArguments[10];
-char *parallelArray[20];
+char *parallelArrayBin[20];
+char *parallelArrayUsr[20];
+char *temp[20];
 
 char bin[600] = "";
 char usr[600] = "";
 char redirection[600] = "";
 char filename[600] = "";
 char parallelCommand[600] = "";
+
+pthread_t myThread[10];
+int k=0;
 
 
 void parseBatch(char * command, char *params[], char *binParams[], char *usrParams[]){
@@ -194,39 +200,40 @@ int executeCmd(){
 }
 
 
-int executeParallel(){
-
-	if(strcmp(bin, "/bin/")==0){
-		strcat(bin, parallelArray[0]);
-		parallelArray[0] = bin;
-	}
-	else if(strcmp(bin, "")==0){
-		strcat(bin, parallelArray[0]);
-		parallelArray[0] = bin;
-	}
-	else{
-		if(strstr(bin, "/bin/")){
-			strcpy(bin, "");
-			strcpy(bin, "/bin/");
-			strcat(bin, parallelArray[0]);
-			parallelArray[0] = bin;
-		}
-	}
-
+void* executeParallel(){
 	pid_t pid = fork();
 	// Child process
 	if (pid == 0) {
-		execv(parallelArray[0], parallelArray);
+
+		//execv(parallelArrayBin[0], parallelArrayBin);
+
+		// Execute command
+		if(!execv(parallelArrayUsr[0], parallelArrayUsr))
+			printf("%s\n", "failed");
+		else
+			execv(parallelArrayBin[0], parallelArrayBin);
+
+		
+		char* error = strerror(errno);
+		printf("\n%s\n", error);
+
+	//printf("%d\n", k);
+		
+		//par();
+		//printf("%s\n", "child");
 		return 0;
 	}
 	// Parent process
-	else {
-	// Wait for child process to finish
-		int childStatus;
-		waitpid(pid, &childStatus, 0);
-		return 1;
-	}
+	 else {
+	// // Wait for child process to finish
+	// 	printf("%s\n", "not child process");
+	 	int childStatus;
+	 	waitpid(pid, &childStatus, 0);
+		//return 1;
+	 }
 }
+
+
 
 
 
@@ -308,30 +315,68 @@ int main(int argc, char *argv[]){
 			else if(strcmp(parallelCommand, "parallel")==0){
 
 				int j =0;
+				k =0;
+				char bintest[600] = "";
+				char usrtest[600] = "";
 
 				for(int i =0; i<10; i++){
+
 					if(allArguments[i]==NULL){
-						executeParallel();
+						pthread_create(&myThread[i], NULL, executeParallel, NULL);
+						pthread_join(myThread[i], NULL);
 						break;
 					}
 
 					if(strcmp(allArguments[i], "&")!=0){
 
-						parallelArray[j] = allArguments[i];
-						//parallelArray[j+1] = NULL;
+						if(j ==0){
 
+						 strcpy(bintest, "");
+						 strcpy(bintest, "/bin/");
+						 parallelArrayBin[j] = allArguments[i];
+						 strcat(bintest, parallelArrayBin[0]);
+						 parallelArrayBin[0] = bintest;
+
+						 strcpy(usrtest, "");
+						 strcpy(usrtest, "/usr/bin/");
+						 parallelArrayUsr[j] = allArguments[i];
+						 strcat(usrtest, parallelArrayUsr[0]);
+						 parallelArrayUsr[0] = usrtest;
+
+						}
+						else{
+
+						parallelArrayBin[j] = allArguments[i];
+						parallelArrayUsr[j] = allArguments[i];
+
+
+					}
 						j++;
 					}
 
 					else{
+
 						j=0;
 
-						executeParallel();
-						memset(parallelArray, 0, sizeof parallelArray);
-						//printf("%s\n", parallelArray[0]);
-						//printf("%s\n", parallelArray[1]);
+						pthread_create(&myThread[i], NULL, executeParallel, NULL);
+						pthread_join(myThread[i], NULL);
+
+						memset(parallelArrayBin, 0, sizeof parallelArrayBin);
+						memset(parallelArrayUsr, 0, sizeof parallelArrayUsr);
+
+						
 					}
 				}
+
+				//printf("%d\n", k);
+
+				// for (int i = 0; i < k; i++){
+				// 	pthread_join(myThread[k], NULL);
+				// }
+
+				//printf("%d\n", k);
+
+				
 
 			}
 
